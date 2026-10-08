@@ -35,8 +35,8 @@ ENTRY_OFFSET = 0
 EXIT_OFFSET = -1
 MIN_TURNOVER = 20_000_000
 GAP_LOW, GAP_HIGH = -0.08, 0.04
-MAX_BIAS = 0.60
-STOP_LOSS = 0.12
+MAX_BIAS = 999  # Bias filter removed (P13: no effect)
+STOP_LOSS = 0.99  # Effectively no stop loss (P13 validated)
 POSITION_LIMIT = 0.20
 FEE_RATIO = 1.425 / 1000 / 3
 
@@ -113,7 +113,7 @@ def run_backtest():
         except KeyError:
             continue
 
-        if any(pd.isna(x) or x <= 0 for x in [prev_c, e_open, current_ma20]):
+        if any(pd.isna(x) or x <= 0 for x in [prev_c, e_open]):
             continue
 
         gap_pct = (e_open - prev_c) / prev_c
@@ -121,9 +121,7 @@ def run_backtest():
             continue
         if pd.isna(avg_to) or avg_to < MIN_TURNOVER:
             continue
-        bias = (prev_c - current_ma20) / current_ma20
-        if bias >= MAX_BIAS:
-            continue
+        # Bias filter removed (P13: no effect)
 
         position.loc[exec_day:trading_days[exit_idx], sym] = True
 
