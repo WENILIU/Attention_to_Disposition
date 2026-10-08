@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>注意到處置 因子研究路線圖</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "Microsoft JhengHei", "Noto Sans TC", sans-serif; background: #0f1117; color: #e0e0e0; padding: 20px; min-height: 100vh; }
+h1 { text-align: center; font-size: 1.6em; color: #fff; margin-bottom: 6px; }
+.subtitle { text-align: center; color: #888; font-size: 0.85em; margin-bottom: 30px; }
+.container { max-width: 1200px; margin: 0 auto; }
+
+/* Timeline */
+.timeline { position: relative; padding-left: 0; }
+.phase-row { display: flex; align-items: stretch; margin-bottom: 12px; position: relative; }
+.phase-card { flex: 1; background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 12px; padding: 16px 20px; position: relative; transition: all 0.2s; cursor: pointer; }
+.phase-card:hover { border-color: #4a90d9; box-shadow: 0 0 20px rgba(74,144,217,0.15); }
+.phase-card.active { border-color: #4a90d9; background: #1e2233; }
+.phase-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.phase-id { font-weight: 700; font-size: 1.1em; color: #4a90d9; min-width: 36px; }
+.phase-name { font-weight: 600; font-size: 1.05em; color: #fff; }
+.phase-desc { color: #999; font-size: 0.85em; line-height: 1.5; }
+.phase-meta { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+.tag { font-size: 0.75em; padding: 2px 8px; border-radius: 4px; }
+.tag-time { background: #2a2520; color: #d4a853; }
+.tag-dep { background: #1e2a20; color: #6abf69; }
+.tag-output { background: #2a1e2a; color: #c084fc; }
+
+/* Gate */
+.gate-row { display: flex; justify-content: center; margin: 8px 0; position: relative; }
+.gate { background: #2a1a1a; border: 2px solid #d94a4a; border-radius: 10px; padding: 12px 24px; text-align: center; max-width: 500px; width: 100%; }
+.gate-label { font-weight: 700; color: #d94a4a; font-size: 0.95em; margin-bottom: 4px; }
+.gate-condition { color: #ccc; font-size: 0.82em; line-height: 1.4; }
+.gate-branch { display: flex; justify-content: center; gap: 30px; margin-top: 8px; }
+.gate-yes { color: #6abf69; font-size: 0.8em; }
+.gate-no { color: #d94a4a; font-size: 0.8em; }
+
+/* Arrow */
+.arrow { display: flex; justify-content: center; margin: 4px 0; }
+.arrow svg { width: 24px; height: 24px; }
+.arrow-down { color: #4a90d9; }
+
+/* Factor table */
+.factor-section { margin-top: 40px; }
+.factor-section h2 { color: #fff; font-size: 1.2em; margin-bottom: 16px; border-bottom: 1px solid #2a2d3a; padding-bottom: 8px; }
+.factor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.factor-card { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 12px 16px; }
+.factor-card.core { border-left: 3px solid #4a90d9; }
+.factor-card.ext { border-left: 3px solid #d4a853; }
+.factor-card.defer { border-left: 3px solid #666; }
+.factor-id { font-weight: 700; color: #4a90d9; font-size: 0.9em; }
+.factor-card.ext .factor-id { color: #d4a853; }
+.factor-card.defer .factor-id { color: #666; }
+.factor-name { font-weight: 600; color: #ddd; margin: 4px 0; }
+.factor-target { font-size: 0.78em; color: #888; }
+.factor-target span { color: #c084fc; }
+
+/* Legend */
+.legend { display: flex; gap: 20px; margin: 20px 0; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.8em; color: #999; }
+.legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+.dot-core { background: #4a90d9; }
+.dot-ext { background: #d4a853; }
+.dot-defer { background: #666; }
+.dot-gate { background: #d94a4a; }
+
+/* Detail panel */
+.detail-panel { display: none; background: #1e2233; border: 1px solid #4a90d9; border-radius: 12px; padding: 20px; margin-top: 12px; }
+.detail-panel.show { display: block; }
+.detail-panel h3 { color: #4a90d9; margin-bottom: 10px; }
+.detail-panel h4 { color: #ddd; margin: 12px 0 6px; font-size: 0.95em; }
+.detail-panel p, .detail-panel li { color: #bbb; font-size: 0.85em; line-height: 1.6; }
+.detail-panel ul { padding-left: 20px; }
+.detail-panel code { background: #2a2d3a; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+.detail-panel table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.detail-panel th, .detail-panel td { border: 1px solid #2a2d3a; padding: 6px 10px; font-size: 0.82em; text-align: left; }
+.detail-panel th { background: #2a2d3a; color: #ddd; }
+
+/* O-variable section */
+.o-section { margin-top: 40px; }
+.o-section h2 { color: #fff; font-size: 1.2em; margin-bottom: 16px; border-bottom: 1px solid #2a2d3a; padding-bottom: 8px; }
+.o-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 12px; }
+.o-card { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 14px 18px; }
+.o-card.primary { border-left: 3px solid #6abf69; }
+.o-card.secondary { border-left: 3px solid #4a90d9; }
+.o-card.control { border-left: 3px solid #666; }
+.o-id { font-weight: 700; font-size: 1em; }
+.o-card.primary .o-id { color: #6abf69; }
+.o-card.secondary .o-id { color: #4a90d9; }
+.o-card.control .o-id { color: #666; }
+.o-name { font-weight: 600; color: #ddd; margin: 4px 0; }
+.o-desc { color: #999; font-size: 0.82em; line-height: 1.5; }
+.o-priority { font-size: 0.75em; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-top: 6px; }
+.p-high { background: #1a2a1a; color: #6abf69; }
+.p-mid { background: #1a1a2a; color: #4a90d9; }
+.p-low { background: #2a2a2a; color: #888; }
+
+/* Story chain */
+.story-chain { display: flex; align-items: center; justify-content: center; gap: 0; margin: 30px 0; flex-wrap: wrap; }
+.story-node { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 100px; }
+.story-node.highlight { border-color: #6abf69; background: #1a2a1a; }
+.story-label { font-weight: 600; font-size: 0.9em; color: #ddd; }
+.story-sub { font-size: 0.75em; color: #888; margin-top: 2px; }
+.story-arrow { color: #4a90d9; font-size: 1.2em; padding: 0 4px; }
+.story-focus { font-size: 0.7em; color: #6abf69; margin-top: 4px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+.tab { padding: 8px 16px; background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 0.85em; color: #999; transition: all 0.2s; }
+.tab.active { background: #1e2233; border-color: #4a90d9; color: #fff; border-bottom-color: #1e2233; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Marginal contribution diagram */
+.mc-diagram { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 12px; padding: 24px; margin: 20px 0; }
+.mc-diagram h3 { color: #fff; margin-bottom: 16px; }
+.mc-flow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.mc-box { background: #252836; border: 1px solid #3a3d4a; border-radius: 8px; padding: 12px 16px; text-align: center; min-width: 140px; }
+.mc-box-title { font-weight: 600; font-size: 0.85em; color: #ddd; }
+.mc-box-desc { font-size: 0.75em; color: #888; margin-top: 4px; }
+.mc-arrow { color: #4a90d9; font-size: 1.5em; }
+.mc-result { background: #1a2a1a; border-color: #6abf69; }
+.mc-reject { background: #2a1a1a; border-color: #d94a4a; }
+
+@media (max-width: 768px) {
+  .phase-row { flex-direction: column; }
+  .story-chain { flex-direction: column; }
+  .story-arrow { transform: rotate(90deg); }
+  .mc-flow { flex-direction: column; }
+  .mc-arrow { transform: rotate(90deg); }
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>注意到處置 因子研究路線圖</h1>
+<p class="subtitle">修正版 v2026-10-07 · 核心因子 15 個 + 有條件擴展 10 個 · 含 Go/No-Go 閘門</p>
+
+<!-- Story Chain -->
+<div class="story-chain">
+  <div class="story-node"><div class="story-label">起漲 M1</div><div class="story-sub">突破高點+量增</div></div>
+  <div class="story-arrow">→</div>
+  <div class="story-node highlight"><div class="story-label">注意 M0</div><div class="story-sub">盤後公告</div><div class="story-focus">★ 研究重點①</div></div>
+  <div class="story-arrow">→</div>
+  <div class="story-node highlight"><div class="story-label">處置公告</div><div class="story-sub">公告→生效</div><div class="story-focus">★ 研究重點②</div></div>
+  <div class="story-arrow">→</div>
+  <div class="story-node highlight"><div class="story-label">處置/關中 M2</div><div class="story-sub">分段報酬</div><div class="story-focus">★ 研究重點③</div></div>
+  <div class="story-arrow">→</div>
+  <div class="story-node"><div class="story-label">出關</div><div class="story-sub">對照組</div></div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('roadmap')">路線圖</div>
+  <div class="tab" onclick="switchTab('factors')">因子登錄表</div>
+  <div class="tab" onclick="switchTab('outcomes')">結果變數</div>
+  <div class="tab" onclick="switchTab('methodology')">邊際貢獻方法</div>
+</div>
+
+<!-- Tab: Roadmap -->
+<div id="tab-roadmap" class="tab-content active">
+<div class="timeline">
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d0')">
+      <div class="phase-header"><span class="phase-id">P0</span><span class="phase-name">基礎設施與資料稽核</span></div>
+      <div class="phase-desc">確認所有資料可用、欄位正確、時間戳精度。統一市場調整基準與進場價假設。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">2-3 天</span>
+        <span class="tag tag-dep">無前置</span>
+        <span class="tag tag-output">research_ledger.csv</span>
+      </div>
+    </div>
+  </div>
+  <div id="d0" class="detail-panel">
+    <h3>P0 詳細工作項目</h3>
+    <table><tr><th>#</th><th>項目</th><th>內容</th></tr>
+    <tr><td>0.1</td><td>研究台帳</td><td>每個因子 ID → 程式/樣本/決策時點/結論狀態</td></tr>
+    <tr><td>0.2</td><td>三大法人</td><td>data.search 確認鍵名、欄位、時間戳精度</td></tr>
+    <tr><td>0.3</td><td>集保資料</td><td>確認鍵名、欄位、週頻對齊方式</td></tr>
+    <tr><td>0.4</td><td>重訊/法說會</td><td>確認時間戳精度（決定 D 系列可行性）</td></tr>
+    <tr><td>0.5</td><td>分點 CSV</td><td>確認是否含買賣價（決定 B7 可行性）</td></tr>
+    <tr><td>0.6</td><td>處置公告時間</td><td>確認是否有公告時間欄位（決定 O3 可行性）</td></tr>
+    <tr><td>0.7</td><td>市場調整基準</td><td>統一 F20 官方基準</td></tr>
+    <tr><td>0.8</td><td>進場價假設</td><td>有開盤價用開盤價，無則收盤價並標記</td></tr>
+    <tr><td>0.9</td><td>CB 覆蓋率</td><td>執行 factor_35 稽核</td></tr></table>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d1')">
+      <div class="phase-header"><span class="phase-id">P1</span><span class="phase-name">注意母表 M0 與升級標籤</span></div>
+      <div class="phase-desc">建立完整「股票×公告日」母表，含未升級者。標記升級結果與可成交性。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">2-3 天</span>
+        <span class="tag tag-dep">前置: P0</span>
+        <span class="tag tag-output">chain_a00_attention_master.py</span>
+      </div>
+    </div>
+  </div>
+  <div id="d1" class="detail-panel">
+    <h3>P1 詳細工作項目</h3>
+    <ul>
+      <li>從 trading_attention 建立所有注意事件（含未升級者）</li>
+      <li>連續注意合併為波段（間隔門檻 5 日，敏感度 3/10）</li>
+      <li>標記 k=5/10/20 日內是否進處置</li>
+      <li>輸出事件數、獨立股票數、各窗口升級率</li>
+      <li><strong>標記次日一字漲停/跌停、成交量是否接近零</strong></li>
+    </ul>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d2')">
+      <div class="phase-header"><span class="phase-id">P2</span><span class="phase-name">規則基準與條款/密度</span></div>
+      <div class="phase-desc">建立 A3 規則狀態機作為所有後續因子的比較基準。完成 O1 基準模型。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">3-5 天</span>
+        <span class="tag tag-dep">前置: P1</span>
+        <span class="tag tag-output">chain_a03/a01/a02</span>
+      </div>
+    </div>
+  </div>
+  <div id="d2" class="detail-panel">
+    <h3>P2 詳細工作項目</h3>
+    <ul>
+      <li>A3 規則狀態機：武裝/未武裝/已觸發，含各條款類型</li>
+      <li>A1 條款類型：regex 分類注意交易資訊文字</li>
+      <li>A2 警示密度：過去 10/30 日注意次數與連續天數</li>
+      <li>O1 基準模型：A3 預測升級，建立基準 AUC/PR-AUC</li>
+      <li>填寫 P3 每個因子的 prereg（假說、通過標準、反證條件）</li>
+    </ul>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="gate-row">
+    <div class="gate">
+      <div class="gate-label">🔴 閘門 G1：規則基準可行性</div>
+      <div class="gate-condition">A3 規則狀態機 O1 AUC ≥ 0.55？<br>注意事件可成交率 ≥ 30%？</div>
+      <div class="gate-branch">
+        <span class="gate-yes">✓ YES → 繼續 P3</span>
+        <span class="gate-no">✗ NO → 暫停整條線</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d3')">
+      <div class="phase-header"><span class="phase-id">P3</span><span class="phase-name">核心因子測試</span></div>
+      <div class="phase-desc">測試 8 個核心因子（A4,A5,A6,A10,A11,B4,B5,B6）對 O1 增量 + O2 初步信號。邊際貢獻檢驗。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">5-7 天</span>
+        <span class="tag tag-dep">前置: G1</span>
+        <span class="tag tag-output">event_features.csv × 8</span>
+      </div>
+    </div>
+  </div>
+  <div id="d3" class="detail-panel">
+    <h3>P3 每個因子的測試流程</h3>
+    <h4>Step 1: 描述性檢驗</h4>
+    <ul><li>Spearman 相關 / 分組升級率 / 分組報酬</li><li>分層報告（S1-S4）</li></ul>
+    <h4>Step 2: 增量檢驗（邊際貢獻）</h4>
+    <ul>
+      <li>基準模型 M₀ = A3 + A1 + 市場控制</li>
+      <li>加入因子 X → M₁</li>
+      <li>(a) ΔAUC + bootstrap 95% CI</li>
+      <li>(b) 回歸係數 t-stat（cluster SE）</li>
+      <li>(c) IC/ICIR 變化 + bootstrap CI</li>
+      <li>任一通過 BH 校正 q≤0.10 → 保留</li>
+    </ul>
+    <h4>Step 3: 穩定性檢驗</h4>
+    <ul><li>前後半段方向一致</li><li>不同條款類型方向一致</li><li>成本後 O2 報酬仍為正</li></ul>
+    <h4>Step 4: 結論分級</h4>
+    <ul><li>通過全部 → 候選 | 部分 → 探索性 | 反向 → 淘汰 | 樣本不足 → 資料不足</li></ul>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d4')">
+      <div class="phase-header"><span class="phase-id">P4</span><span class="phase-name">O2 可交易性驗證</span></div>
+      <div class="phase-desc">把通過的因子接到可交易報酬。強制三層報告：全樣本 / 可成交 / 無法成交。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">3-5 天</span>
+        <span class="tag tag-dep">前置: P3</span>
+        <span class="tag tag-output">三層報告 + 成本後績效</span>
+      </div>
+    </div>
+  </div>
+  <div id="d4" class="detail-panel">
+    <h3>P4 三層報告（強制）</h3>
+    <table><tr><th>層級</th><th>定義</th><th>用途</th></tr>
+    <tr><td>全樣本</td><td>所有注意事件，含一字漲停</td><td>描述性，理解 alpha 來源</td></tr>
+    <tr><td>可成交</td><td>排除一字漲停/跌停、量不足</td><td><strong>唯一可用的策略績效</strong></td></tr>
+    <tr><td>無法成交</td><td>被排除的事件</td><td>如果 alpha 全在這裡 → 因子實務無用</td></tr></table>
+    <h4>關鍵原則</h4>
+    <ul>
+      <li>「事後進處置者的報酬」是路徑描述，不是策略績效</li>
+      <li>升級方向不能從 O1 推論交易方向</li>
+      <li>可成交 alpha 消失 → 標記「實務不可交易」</li>
+    </ul>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d5')">
+      <div class="phase-header"><span class="phase-id">P5</span><span class="phase-name">O4 處置期間分段分析</span></div>
+      <div class="phase-desc">三種預先指定進場規則 × 分段報酬拆解。回答「錢在哪一段賺到」。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">3-5 天</span>
+        <span class="tag tag-dep">前置: P4</span>
+        <span class="tag tag-output">分段報酬表 + 可成交標記</span>
+      </div>
+    </div>
+  </div>
+  <div id="d5" class="detail-panel">
+    <h3>P5 三種進場規則（預先指定，不事後挑）</h3>
+    <table><tr><th>規則</th><th>決策當時能知道</th><th>出場選項</th></tr>
+    <tr><td>固定日進場</td><td>處置第 1/2/3 日 + 制度</td><td>關中某日 / 出關開盤 / 出關收盤</td></tr>
+    <tr><td>跌深後承接</td><td>截至前一日的回檔/量縮/波動</td><td>固定持有日 / 關前出場 / 出關出場</td></tr>
+    <tr><td>強勢延續</td><td>截至前一日的相對強度/價量</td><td>同上，與跌深組比較</td></tr></table>
+    <h4>O4 分段（強制）</h4>
+    <ul>
+      <li>段1: 買入 → 關中某日（處置期間利潤）</li>
+      <li>段2: 關中末日 → 出關開盤（隔夜跳空）</li>
+      <li>段3: 出關開盤 → 出關收盤（出關日盤中）</li>
+    </ul>
+    <p style="color:#d94a4a; margin-top:8px;">「第3天買到出關有利潤」≠「處置期間有利潤」— 必須分段才知道。</p>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="gate-row">
+    <div class="gate">
+      <div class="gate-label">🔴 閘門 G2：可交易性決策</div>
+      <div class="gate-condition">任一因子對 O2/O4 有邊際改善（BH 校正）？<br>可成交子樣本成本後淨報酬為正？<br>可成交事件 ≥ 50 筆？</div>
+      <div class="gate-branch">
+        <span class="gate-yes">✓ YES → 繼續 P6</span>
+        <span class="gate-no">✗ NO → 結論：無法支撐可交易策略</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d6')">
+      <div class="phase-header"><span class="phase-id">P6</span><span class="phase-name">擴展因子（有條件啟動）</span></div>
+      <div class="phase-desc">僅在 G2 通過後啟動。測試 A7,A8,A9,E1,E2,B1-B3,D1-D3。基準模型升級為核心因子。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">5-7 天</span>
+        <span class="tag tag-dep">前置: G2</span>
+        <span class="tag tag-output">擴展因子增量報告</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d7')">
+      <div class="phase-header"><span class="phase-id">P7</span><span class="phase-name">策略級逐筆交易模擬</span></div>
+      <div class="phase-desc">固定進出場規則、成本、無法成交標記。開發期/測試期切分。資金效率計算。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">5-7 天</span>
+        <span class="tag tag-dep">前置: P3-P6 通過者</span>
+        <span class="tag tag-output">chain_trade_sim_*.csv</span>
+      </div>
+    </div>
+  </div>
+  <div id="d7" class="detail-panel">
+    <h3>P7 模擬規則</h3>
+    <ul>
+      <li>不用因子分數連續權重，用預先指定的規則</li>
+      <li>成本：手續費 0.1425% + 證交稅 0.3% + 滑價 0.5%/1%</li>
+      <li>無法成交標記，不刪除</li>
+      <li>開發期 2022 年以前，測試期 2023 年以後</li>
+      <li>新制（2026-08-10）僅監測</li>
+      <li>指標：淨期望報酬、勝率、Sharpe、最大回撤、尾部虧損、可執行交易數、資金效率</li>
+    </ul>
+  </div>
+
+  <div class="arrow"><span class="arrow-down">▼</span></div>
+
+  <div class="phase-row">
+    <div class="phase-card" onclick="toggleDetail('d8')">
+      <div class="phase-header"><span class="phase-id">P8</span><span class="phase-name">因子組合（固定方法）</span></div>
+      <div class="phase-desc">三種方法預先指定（IC-weighted / Elastic Net / 等權重），不搜組合。取最保守結果。</div>
+      <div class="phase-meta">
+        <span class="tag tag-time">2-3 天</span>
+        <span class="tag tag-dep">前置: P7</span>
+        <span class="tag tag-output">最終候選 或 「無可交易策略」</span>
+      </div>
+    </div>
+  </div>
+  <div id="d8" class="detail-panel">
+    <h3>P8 組合方法（預先指定，不搜組合）</h3>
+    <table><tr><th>方法</th><th>說明</th><th>角色</th></tr>
+    <tr><td>IC-weighted</td><td>各因子 IC 滾動均值作權重</td><td>標準方法</td></tr>
+    <tr><td>Elastic Net</td><td>α=0.5, λ 由時間序列 CV 選取</td><td>自動篩選+收縮</td></tr>
+    <tr><td>等權重</td><td>所有通過因子等權</td><td>最保守對照</td></tr></table>
+    <p style="color:#d94a4a; margin-top:8px;">不允許「試了 N 種組合後挑 Sharpe 最高的那個」。</p>
+  </div>
+
+</div>
+</div>
+
+<!-- Tab: Factors -->
+<div id="tab-factors" class="tab-content">
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot dot-core"></div>核心因子（P3 即測試）</div>
+  <div class="legend-item"><div class="legend-dot dot-ext"></div>有條件擴展（G2 通過後）</div>
+  <div class="legend-item"><div class="legend-dot dot-defer"></div>暫緩</div>
+</div>
+
+<h2 style="color:#fff; font-size:1.1em; margin-bottom:12px;">核心因子（15 個）</h2>
+<div class="factor-grid">
+  <div class="factor-card core"><div class="factor-id">A3</div><div class="factor-name">規則狀態機</div><div class="factor-target">目標: <span>O1</span> · 角色: 基準 · 資料: ✅</div></div>
+  <div class="factor-card core"><div class="factor-id">A1</div><div class="factor-name">條款類型</div><div class="factor-target">目標: <span>O1, O2</span> · 資料: ✅</div></div>
+  <div class="factor-card core"><div class="factor-id">A2</div><div class="factor-name">警示密度</div><div class="factor-target">目標: <span>O1, O2</span> · 資料: ✅</div></div>
+  <div class="factor-card core"><div class="factor-id">A4</div><div class="factor-name">文字強度</div><div class="factor-target">目標: <span>O1, O2</span> · 初步結果強 · 資料: ✅</div></div>
+  <div class="factor-card core"><div class="factor-id">A5</div><div class="factor-name">價量動量</div><div class="factor-target">目標: <span>O1, O2</span> · 資料: ✅</div></div>
+  <div class="factor-card core"><div class="factor-id">A6</div><div class="factor-name">波動率與週轉率</div><div class="factor-target">目標: <span>O1, O2</span> · 資料: ✅</div></div>
+  <div class="factor-card core"><div class="factor-id">S1-S4</div><div class="factor-name">分層控制變數</div><div class="factor-target">角色: 控制 · 市值/行業/流動性/制度</div></div>
+  <div class="factor-card core"><div class="factor-id">A10</div><div class="factor-name">三大法人</div><div class="factor-target">目標: <span>O2, O4</span> · 資料: ⚠️ 鍵名待確認</div></div>
+  <div class="factor-card core"><div class="factor-id">A11</div><div class="factor-name">融資融券</div><div class="factor-target">目標: <span>O2, O4</span> · 資料: ✅</div></div>
+  <div class="factor-card core"><div class="factor-id">B4</div><div class="factor-name">分點集中度</div><div class="factor-target">目標: <span>O4</span> · 資料: ✅ 本地已有</div></div>
+  <div class="factor-card core"><div class="factor-id">B5</div><div class="factor-name">分點買賣方向</div><div class="factor-target">目標: <span>O4</span> · 資料: ✅ 本地已有</div></div>
+  <div class="factor-card core"><div class="factor-id">B6</div><div class="factor-name">分點行為變化</div><div class="factor-target">目標: <span>O4</span> · 資料: ✅ 本地已有</div></div>
+</div>
+
+<h2 style="color:#d4a853; font-size:1.1em; margin:24px 0 12px;">有條件擴展因子（10 個）</h2>
+<div class="factor-grid">
+  <div class="factor-card ext"><div class="factor-id">A7</div><div class="factor-name">技術狀態（均線/RSI）</div><div class="factor-target">啟動: A4+A5+A6 通過後</div></div>
+  <div class="factor-card ext"><div class="factor-id">A8</div><div class="factor-name">距門檻距離</div><div class="factor-target">啟動: A4 正式化後</div></div>
+  <div class="factor-card ext"><div class="factor-id">A9</div><div class="factor-name">注意間隔模式</div><div class="factor-target">啟動: A2 通過後</div></div>
+  <div class="factor-card ext"><div class="factor-id">A14</div><div class="factor-name">除息/增資事件</div><div class="factor-target">啟動: P3 閘門通過後</div></div>
+  <div class="factor-card ext"><div class="factor-id">B1-B3</div><div class="factor-name">集保股權分散</div><div class="factor-target">啟動: B4-B6 通過後 · ⚠️ 週頻對齊</div></div>
+  <div class="factor-card ext"><div class="factor-id">D1-D3</div><div class="factor-name">重訊/法說會</div><div class="factor-target">啟動: 核心因子通過 P5 後 · ⚠️ 時間精度</div></div>
+  <div class="factor-card ext"><div class="factor-id">E1-E2</div><div class="factor-name">當沖比/異常量</div><div class="factor-target">啟動: A6 通過後</div></div>
+</div>
+
+<h2 style="color:#666; font-size:1.1em; margin:24px 0 12px;">明確暫緩</h2>
+<div class="factor-grid">
+  <div class="factor-card defer"><div class="factor-id">C1-C7</div><div class="factor-name">故事鏈/階段分類</div><div class="factor-target">原因: 複雜度高，需先確認 O2/O4 有 edge</div></div>
+  <div class="factor-card defer"><div class="factor-id">D4-D6</div><div class="factor-name">營收/題材/CB</div><div class="factor-target">原因: 資料取得或時間精度問題</div></div>
+  <div class="factor-card defer"><div class="factor-id">E5-E6</div><div class="factor-name">Google Trends/PTT</div><div class="factor-target">原因: 資料未取得，週頻對齊</div></div>
+  <div class="factor-card defer"><div class="factor-id">P1-P8</div><div class="factor-name">技術形態規則</div><div class="factor-target">原因: 資料窺探風險極高</div></div>
+  <div class="factor-card defer"><div class="factor-id">B7-B10</div><div class="factor-name">分點價格/主力成本</div><div class="factor-target">原因: 資料可用性未確認</div></div>
+</div>
+</div>
+
+<!-- Tab: Outcomes -->
+<div id="tab-outcomes" class="tab-content">
+<div class="o-grid">
+  <div class="o-card primary">
+    <div class="o-id">O2</div><div class="o-name">注意→處置段報酬</div>
+    <div class="o-desc">全部注意事件，公告次日起 1/3/5/10 日報酬。含未升級者。強制三層可交易性報告。成本後淨報酬為主要判定指標。</div>
+    <div class="o-priority p-high">主要研究量 ①</div>
+  </div>
+  <div class="o-card primary">
+    <div class="o-id">O4</div><div class="o-name">處置期間分段報酬</div>
+    <div class="o-desc">已進處置事件，分段：買入→關中 / 關中→出關開盤 / 出關開盤→收盤。三種預先指定進場規則。新舊制分開。</div>
+    <div class="o-priority p-high">主要研究量 ②</div>
+  </div>
+  <div class="o-card secondary">
+    <div class="o-id">O3</div><div class="o-name">處置公告→生效日報酬</div>
+    <div class="o-desc">已升級事件。需確認公告時間欄位。無法確認則標「無法驗證」。</div>
+    <div class="o-priority p-mid">次要</div>
+  </div>
+  <div class="o-card secondary">
+    <div class="o-id">O1</div><div class="o-name">升級機率</div>
+    <div class="o-desc">注意公告後 k 日內進處置的機率。PR-AUC、校準曲線。輔助指標，O1 顯著不代表可交易。</div>
+    <div class="o-priority p-mid">輔助指標</div>
+  </div>
+  <div class="o-card control">
+    <div class="o-id">O5</div><div class="o-name">出關後報酬</div>
+    <div class="o-desc">出關後 5/10/20 日報酬。僅作對照，不再佔主要研究量。既有 F 系列結果保留。</div>
+    <div class="o-priority p-low">對照組</div>
+  </div>
+</div>
+</div>
+
+<!-- Tab: Methodology -->
+<div id="tab-methodology" class="tab-content">
+<div class="mc-diagram">
+  <h3>邊際貢獻檢驗流程</h3>
+  <p style="color:#999; margin-bottom:16px; font-size:0.85em;">核心問題：單因子不顯著但組合有效時，因子該不該保留？<br>答案：不看單獨顯著性，看加入後組合是否有統計顯著的邊際改善。</p>
+  <div class="mc-flow">
+    <div class="mc-box"><div class="mc-box-title">基準模型 M₀</div><div class="mc-box-desc">A3 + A1 + 市場控制<br>+ S1-S4 分層</div></div>
+    <div class="mc-arrow">→</div>
+    <div class="mc-box"><div class="mc-box-title">加入因子 X</div><div class="mc-box-desc">得到模型 M₁</div></div>
+    <div class="mc-arrow">→</div>
+    <div class="mc-box"><div class="mc-box-title">比較 M₁ vs M₀</div><div class="mc-box-desc">(a) ΔAUC + CI<br>(b) 係數 t-stat<br>(c) IC 變化 + CI</div></div>
+    <div class="mc-arrow">→</div>
+    <div class="mc-box"><div class="mc-box-title">BH 校正</div><div class="mc-box-desc">全因子家族<br>q ≤ 0.10</div></div>
+    <div class="mc-arrow">→</div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div class="mc-box mc-result"><div class="mc-box-title">任一通過 → 保留</div></div>
+      <div class="mc-box mc-reject"><div class="mc-box-title">全部不通過 → 不進入組合</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="mc-diagram">
+  <h3>多重檢驗控制策略</h3>
+  <table><tr><th>層級</th><th>方法</th><th>適用範圍</th></tr>
+  <tr><td>因子篩選</td><td>BH 校正 q ≤ 0.10</td><td>全因子家族一起做</td></tr>
+  <tr><td>技術規則</td><td>Reality Check / SPA</td><td>整個預先登記的規則宇宙</td></tr>
+  <tr><td>因子組合</td><td>方法預先指定（3種）</td><td>不增加搜索空間</td></tr>
+  <tr><td>樣本外</td><td>只跑一次（2023+）</td><td>開發期/測試期嚴格切分</td></tr>
+  <tr><td>閘門</td><td>G1/G2 硬性停止條件</td><td>不通過則不繼續</td></tr></table>
+</div>
+
+<div class="mc-diagram">
+  <h3>O2 可交易性三層報告</h3>
+  <table><tr><th>層級</th><th>定義</th><th>用途</th></tr>
+  <tr><td style="color:#888">全樣本</td><td>所有注意事件，含一字漲停/跌停</td><td>描述性，理解 alpha 來源和大小</td></tr>
+  <tr><td style="color:#6abf69">可成交</td><td>排除一字漲停/跌停、成交量 < 門檻</td><td><strong>唯一可用的策略績效</strong></td></tr>
+  <tr><td style="color:#d94a4a">無法成交</td><td>被排除的事件</td><td>如果 alpha 全在這裡 → 因子實務上無用</td></tr></table>
+  <p style="color:#d4a853; margin-top:12px; font-size:0.85em;">⚠ 如果高強度注意股 90% 隔日一字漲停，可成交子樣本的 alpha 可能為零。這必須誠實報告。</p>
+</div>
+
+<div class="mc-diagram">
+  <h3>O4 分段報酬拆解</h3>
+  <div class="mc-flow">
+    <div class="mc-box"><div class="mc-box-title">段1: 買入→關中某日</div><div class="mc-box-desc">處置期間內的利潤<br>這是你要的「處置期間 alpha」</div></div>
+    <div class="mc-arrow">+</div>
+    <div class="mc-box"><div class="mc-box-title">段2: 關中末日→出關開盤</div><div class="mc-box-desc">隔夜跳空<br>不可交易（停牌）</div></div>
+    <div class="mc-arrow">+</div>
+    <div class="mc-box"><div class="mc-box-title">段3: 出關開盤→收盤</div><div class="mc-box-desc">出關日盤中<br>可交易但風險高</div></div>
+  </div>
+  <p style="color:#d94a4a; margin-top:12px; font-size:0.85em;">「第3天買到出關有利潤」≠「處置期間有利潤」。不同出場價位不能混稱同一條策略。</p>
+</div>
+</div>
+
+</div>
+
+<script>
+function switchTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+function toggleDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('show');
+}
+</script>
+</body>
+</html>
