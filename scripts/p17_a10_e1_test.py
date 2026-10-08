@@ -18,6 +18,8 @@ TOKEN_FILE = P(r"D:\AI專案\StockAgent\finlab\開發straget_監獄兔\auth_toke
 if TOKEN_FILE.exists():
     with open(TOKEN_FILE, "r", encoding="utf-8") as f:
         finlab.login(f.read().strip())
+import finlab.data as _fd
+_fd._default_context._role = "vip"
 
 OUT = Path(r"D:\AI專案\StockAgent\finlab\database\disposal_outputs\p17_a10_e1")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -91,8 +93,7 @@ def main():
         dis["stock_id"].str.match(r"^\d{4}$") &
         dis["stock_id"].isin(valid_stocks) &
         ~dis["stock_id"].str.startswith(("00", "91")) &
-        (dis["announce"] >= "2018-01-01") &
-        (dis["announce"] < "2024-01-01")  # Limited by free data cutoff
+        (dis["announce"] >= "2018-01-01")
     ].copy()
 
     cal = pd.DatetimeIndex(close.index).normalize().unique().sort_values()
