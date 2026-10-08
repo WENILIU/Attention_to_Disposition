@@ -1,4 +1,6 @@
-"""監獄兔 V20 - 新制版 (2026-08-10+)
+"""監獄兔 V20 Final - 新制版 (2026-08-10+)
+
+P13 optimized: removed stop loss and bias filter. Keep liquidity + gap only.
 
 Changes from V19:
   - Entry: Day 1 (was Day 4) — new regime disposal is only 5 days
@@ -33,7 +35,7 @@ RESULT_PATH.mkdir(parents=True, exist_ok=True)
 
 # ==================== 1. Parameters ====================
 print("=" * 60)
-print("  監獄兔 V20 - 新制版")
+print("  監獄兔 V20 Final (P13 optimized)")
 print("=" * 60)
 
 # Regime detection
@@ -47,10 +49,10 @@ EXIT_OFFSET = -1       # Day 4 = end_idx - 1 (day before end)
 MIN_TURNOVER = 20_000_000   # NT$20M avg daily turnover
 GAP_LOW = -0.08             # Skip if gap < -8%
 GAP_HIGH = 0.04             # Skip if gap > +4%
-MAX_BIAS = 0.60             # Skip if price > 60% above MA20
+MAX_BIAS = 999              # Bias filter removed (P13: no effect)
 
 # Risk management
-STOP_LOSS = 0.12            # 12% stop loss
+STOP_LOSS = 0.99            # Effectively no stop loss (P13: stop loss hurts)
 POSITION_LIMIT = 0.20       # 20% per position (5 positions)
 FEE_RATIO = 1.425 / 1000 / 3  # finlab fee
 
@@ -146,7 +148,7 @@ for row in dis_target.itertuples():
     current_ma20 = ma20.loc[signal_day, sym] if signal_day in ma20.index else np.nan
     avg_to = avg_turnover_5d.loc[signal_day, sym] if signal_day in avg_turnover_5d.index else np.nan
 
-    if any(pd.isna(x) or x <= 0 for x in [prev_c, e_open, current_ma20]):
+    if any(pd.isna(x) or x <= 0 for x in [prev_c, e_open]):
         filter_reasons["nan"] += 1
         n_filtered += 1
         continue
@@ -165,12 +167,8 @@ for row in dis_target.itertuples():
         n_filtered += 1
         continue
 
-    # Bias filter (price vs MA20)
-    bias = (prev_c - current_ma20) / current_ma20
-    if bias >= MAX_BIAS:
-        filter_reasons["bias"] += 1
-        n_filtered += 1
-        continue
+    # Bias filter REMOVED (P13: no effect, hurts returns)
+    # Keeping ma20 computation for potential future use but not filtering
 
     # === PASS: Set position ===
     position.loc[exec_day:trading_days[exit_idx], sym] = True
@@ -208,7 +206,7 @@ report = sim(
     position_limit=POSITION_LIMIT,
     stop_loss=STOP_LOSS,
     upload=False,
-    name="監獄兔_V20_新制版",
+    name="監獄兔_V20_Final",
 )
 
 stats = report.get_stats()
@@ -272,7 +270,7 @@ for row in dis_old.itertuples():
     current_ma20 = ma20.loc[signal_day, sym] if signal_day in ma20.index else np.nan
     avg_to = avg_turnover_5d.loc[signal_day, sym] if signal_day in avg_turnover_5d.index else np.nan
 
-    if any(pd.isna(x) or x <= 0 for x in [prev_c, e_open, current_ma20]):
+    if any(pd.isna(x) or x <= 0 for x in [prev_c, e_open]):
         continue
 
     gap_pct = (e_open - prev_c) / prev_c
