@@ -35,9 +35,9 @@ ENTRY_OFFSET = 0
 EXIT_OFFSET = -1
 MIN_TURNOVER = 20_000_000
 GAP_LOW, GAP_HIGH = -0.08, 0.04
-MAX_BIAS = 999  # Bias filter removed (P13: no effect)
-STOP_LOSS = 0.99  # Effectively no stop loss (P13 validated)
+# P13 confirmed: bias filter and stop loss have no effect. Removed.
 POSITION_LIMIT = 0.20
+BREADTH_FILTER_MIN = 0.40  # S3: skip entries when breadth < 40% and market below MA20
 FEE_RATIO = 1.425 / 1000 / 3
 
 # Alert thresholds

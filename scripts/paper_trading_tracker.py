@@ -26,6 +26,7 @@ V20_OUTPUT = Path(r"D:\AI專案\StockAgent\finlab\開發straget_監獄兔\v20_ou
 CLONG_OUTPUT = Path(r"D:\AI專案\StockAgent\finlab\開發straget_監獄兔\c_long_output")
 
 LOG_PATH = TRACKER_DIR / "paper_trades_log.csv"
+EXEC_LOG_PATH = TRACKER_DIR / "execution_assumptions.csv"
 STATE_PATH = TRACKER_DIR / "tracker_state.json"
 
 
@@ -194,6 +195,7 @@ def main():
 
     if args.log:
         log_orders()
+        log_execution_assumptions()
     elif args.report:
         show_report()
     elif args.weekly:
