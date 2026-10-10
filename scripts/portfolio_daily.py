@@ -53,6 +53,10 @@ BREADTH_DECLINE_THRESHOLD = -0.15  # 5天廣度下降>15%
 SHORT_HOLD_DAYS = 3
 SHORT_COST = 0.001  # 期貨交易成本
 
+# S4 處置進場壓力（增強做空訊號）
+S4_DISPOSAL_PRESSURE_MIN = 5  # 當日處置進場數 >= 5 視為高壓力
+S4_SHORT_BONUS = 0.10  # S1+S4 同時觸發時，額外增加 10% 做空配置
+
 # C-Long 參數
 CLONG_THRESHOLD = 0.55
 CLONG_MAX_POSITIONS = 5
@@ -91,6 +95,16 @@ def compute_breadth_signal(close, cal):
     short_position = short_signal.rolling(SHORT_HOLD_DAYS, min_periods=1).max()
 
     return short_position, breadth_decline, above_ma20
+
+
+def compute_disposal_pressure(dis, cal):
+    """Count disposal entries per day — high count = market froth."""
+    dis_start_counts = dis.groupby("start_idx").size()
+    pressure = pd.Series(0, index=range(len(cal)))
+    for idx, count in dis_start_counts.items():
+        if 0 <= idx < len(cal):
+            pressure[idx] = count
+    return pressure
 
 
 # ==================== 2. V20 訊號 ====================
@@ -208,10 +222,30 @@ def run_production():
     # Compute breadth signal
     short_position, breadth_decline, above_ma20 = compute_breadth_signal(close, cal)
 
+    # S4: disposal pressure signal
+    disposal_pressure = compute_disposal_pressure(dis, cal)
+    mkt_ret_pf = close.pct_change().mean(axis=1)
+    mkt_close_pf = (1 + mkt_ret_pf).cumprod()
+    mkt_ma20_pf = mkt_close_pf.rolling(20).mean()
+    mkt_weak = bool(mkt_close_pf.iloc[today_idx] < mkt_ma20_pf.iloc[today_idx]) if today_idx < len(mkt_ma20_pf) else False
+    s4_active = bool(disposal_pressure.iloc[today_idx] >= S4_DISPOSAL_PRESSURE_MIN and mkt_weak)
+
+    # Combined short: S1 primary, S4 confirms/enhances
+    s1_active = bool(short_position.iloc[today_idx])
+    short_allocation = ALLOC_SHORT
+    if s1_active and s4_active:
+        short_allocation = ALLOC_SHORT + S4_SHORT_BONUS
+    elif s4_active and not s1_active:
+        short_allocation = ALLOC_SHORT * 0.5
+
     print(f"\n  日期: {today.date()}")
     print(f"  市場廣度: {above_ma20.iloc[today_idx]:.1%} 股票在MA20上")
     print(f"  廣度5日變化: {breadth_decline.iloc[today_idx]:+.1%}")
-    print(f"  做空狀態: {'🔴 做空啟動' if short_position.iloc[today_idx] else '⚪ 無'}")
+    print(f"  處置進場壓力: {disposal_pressure.iloc[today_idx]} 檔 (門檻{S4_DISPOSAL_PRESSURE_MIN})")
+    print(f"  S1 廣度做空: {'🔴 啟動' if s1_active else '⚪ 無'}")
+    print(f"  S4 處置壓力: {'🔴 啟動' if s4_active else '⚪ 無'}")
+    if s1_active or s4_active:
+        print(f"  做空配置: {short_allocation:.0%}")
 
     # Market MA20 for V20 filter
     mkt_ret = close.pct_change().mean(axis=1)
@@ -230,17 +264,23 @@ def run_production():
     # Build orders
     orders = []
 
-    # Short signal
-    if short_position.iloc[today_idx] and not state.get("short_active", False):
+    # Short signal (S1 + S4 combined)
+    short_active_now = s1_active or s4_active
+    if short_active_now and not state.get("short_active", False):
+        reasons = []
+        if s1_active:
+            reasons.append(f"廣度降{breadth_decline.iloc[today_idx]:.1%}")
+        if s4_active:
+            reasons.append(f"處置壓力{disposal_pressure.iloc[today_idx]}檔")
         orders.append({
             "strategy": "SHORT",
             "action": "SELL_SHORT",
             "instrument": "台指期貨 / 00649R",
-            "reason": f"廣度5日降{breadth_decline.iloc[today_idx]:.1%}",
+            "reason": " + ".join(reasons),
             "hold_days": SHORT_HOLD_DAYS,
-            "allocation": ALLOC_SHORT,
+            "allocation": short_allocation,
         })
-    elif not short_position.iloc[today_idx] and state.get("short_active", False):
+    elif not short_active_now and state.get("short_active", False):
         orders.append({
             "strategy": "SHORT",
             "action": "COVER",
@@ -269,7 +309,7 @@ def run_production():
         print(f"\n  ✅ 今日無訂單")
 
     # Update state
-    state["short_active"] = bool(short_position.iloc[today_idx])
+    state["short_active"] = bool(s1_active or s4_active)
     state["last_run"] = str(today.date())
     state["breadth"] = float(above_ma20.iloc[today_idx])
     save_state(state)
@@ -297,24 +337,53 @@ def run_backtest():
 
     # Market returns
     mkt_ret = close.pct_change().mean(axis=1)
+    mkt_close_bt = (1 + mkt_ret).cumprod()
+    mkt_ma20_bt = mkt_close_bt.rolling(20).mean()
 
-    # Breadth signal
+    # Build disposal DataFrame (needed for S4 and V20 filter)
+    dis = pd.DataFrame(dis_raw).copy()
+    dis["stock_id"] = dis["symbol"].astype(str).str.zfill(4)
+    dis["start"] = pd.to_datetime(dis["處置開始時間"]).dt.normalize()
+    dis["end"] = pd.to_datetime(dis["處置結束時間"]).dt.normalize()
+    dis = dis[
+        dis["stock_id"].str.match(r"^\d{4}$") &
+        dis["stock_id"].isin(valid_stocks) &
+        ~dis["stock_id"].str.startswith(("00", "91"))
+    ].copy()
+    dis["start_idx"] = cal.searchsorted(dis["start"], side="left")
+
+    # Breadth signal (S1)
     short_position, breadth_decline, above_ma20 = compute_breadth_signal(close, cal)
 
-    # Short strategy returns
+    # S4: disposal pressure signal
+    disposal_pressure = compute_disposal_pressure(dis, cal)
+    mkt_weak_series = pd.Series(mkt_close_bt.values < mkt_ma20_bt.values, index=cal)
+
+    s4_series = pd.Series(False, index=cal)
+    for i in range(n_cal):
+        if disposal_pressure.iloc[i] >= S4_DISPOSAL_PRESSURE_MIN and mkt_weak_series.iloc[i]:
+            s4_series.iloc[i] = True
+
+    # Combined short: S1 primary + S4 enhancement
     short_daily = pd.Series(0.0, index=cal)
     for i in range(n_cal):
-        if short_position.iloc[i]:
-            short_daily.iloc[i] = -mkt_ret.iloc[i] - SHORT_COST
+        s1 = bool(short_position.iloc[i])
+        s4 = bool(s4_series.iloc[i])
+        if s1 and s4:
+            alloc = ALLOC_SHORT + S4_SHORT_BONUS
+        elif s1:
+            alloc = ALLOC_SHORT
+        elif s4:
+            alloc = ALLOC_SHORT * 0.5
+        else:
+            continue
+        short_daily.iloc[i] = -mkt_ret.iloc[i] * alloc - SHORT_COST * alloc
 
     # V20 returns (load from P23 results, apply S3 breadth filter)
     v20_path = Path(r"D:\AI專案\StockAgent\finlab\database\disposal_outputs\p23_v20_longterm\p23_v20_longterm_trades.csv")
     v20_trades = pd.read_csv(v20_path, parse_dates=["entry_date", "exit_date"])
 
     # S3 filter: skip entries when breadth < 40% AND market below MA20
-    mkt_ret_bt = close.pct_change().mean(axis=1)
-    mkt_close_bt = (1 + mkt_ret_bt).cumprod()
-    mkt_ma20_bt = mkt_close_bt.rolling(20).mean()
     v20_trades["entry_idx"] = cal.searchsorted(v20_trades["entry_date"], side="left")
     mask_bad = pd.Series(False, index=v20_trades.index)
     for idx, t in v20_trades.iterrows():
@@ -337,13 +406,13 @@ def run_backtest():
             v20_daily.iloc[d] += dr
 
     # Combined
-    combined = v20_daily + short_daily * ALLOC_SHORT
+    combined = v20_daily + short_daily
 
     # Metrics
     for label, ret_series in [
         ("V20 單獨", v20_daily),
         ("做空單獨", short_daily),
-        ("V20 70% + 做空 20%", combined),
+        ("V20 + Short(S1+S4)", combined),
     ]:
         cum = (1 + ret_series).cumprod()
         sharpe = np.mean(ret_series) / np.std(ret_series) * np.sqrt(252) if np.std(ret_series) > 0 else 0
