@@ -44,6 +44,10 @@ V20_GAP_HIGH = 0.04
 V20_COST = 0.001425 + 0.003 + 0.003
 NEW_REGIME_DATE = pd.Timestamp("2026-08-10")
 
+# V20 品質過濾 (S3 發現)
+V20_BREADTH_MIN = 0.40
+V20_EXCLUDE_CONDITIONS = ["連續5個營業日及沖銷標準"]
+
 # 做空參數
 BREADTH_DECLINE_THRESHOLD = -0.15  # 5天廣度下降>15%
 SHORT_HOLD_DAYS = 3
@@ -90,7 +94,7 @@ def compute_breadth_signal(close, cal):
 
 
 # ==================== 2. V20 訊號 ====================
-def generate_v20_signals(dis, close, open_p, cal, avg_turnover_5d, danger_zone, today_idx):
+def generate_v20_signals(dis, close, open_p, cal, avg_turnover_5d, danger_zone, today_idx, above_ma20, mkt_close, mkt_ma20):
     """Generate V20 BUY signals for disposals starting today."""
     signals = []
     today = cal[today_idx]
@@ -107,6 +111,17 @@ def generate_v20_signals(dis, close, open_p, cal, avg_turnover_5d, danger_zone, 
     if danger_zone.iloc[today_idx]:
         return signals
 
+    breadth = float(above_ma20.iloc[today_idx]) if today_idx < len(above_ma20) else 0.5
+    mkt_below_ma20 = False
+    try:
+        mkt_below_ma20 = mkt_close.iloc[today_idx] < mkt_ma20.iloc[today_idx]
+    except (IndexError, KeyError):
+        pass
+
+    if breadth < V20_BREADTH_MIN and mkt_below_ma20:
+        print(f"  ⚠️ V20 過濾: 廣度{breadth:.1%}<{V20_BREADTH_MIN:.0%} + MA20下 → 跳過進場")
+        return signals
+
     for _, row in starting_today.iterrows():
         sym = row["stock_id"]
         if row["is_new_regime"]:
@@ -118,6 +133,10 @@ def generate_v20_signals(dis, close, open_p, cal, avg_turnover_5d, danger_zone, 
         exit_idx = int(row["end_idx"]) - 1
 
         if entry_idx != today_idx or exit_idx <= entry_idx:
+            continue
+
+        cond = str(row.get("condition", ""))
+        if any(ex in cond for ex in V20_EXCLUDE_CONDITIONS):
             continue
 
         try:
@@ -194,9 +213,15 @@ def run_production():
     print(f"  廣度5日變化: {breadth_decline.iloc[today_idx]:+.1%}")
     print(f"  做空狀態: {'🔴 做空啟動' if short_position.iloc[today_idx] else '⚪ 無'}")
 
+    # Market MA20 for V20 filter
+    mkt_ret = close.pct_change().mean(axis=1)
+    mkt_close = (1 + mkt_ret).cumprod()
+    mkt_ma20 = mkt_close.rolling(20).mean()
+
     # Generate V20 signals
     v20_signals = generate_v20_signals(
-        dis, close, open_p, cal, avg_turnover_5d, danger_zone, today_idx
+        dis, close, open_p, cal, avg_turnover_5d, danger_zone, today_idx,
+        above_ma20, mkt_close, mkt_ma20
     )
 
     # Load state
@@ -282,9 +307,25 @@ def run_backtest():
         if short_position.iloc[i]:
             short_daily.iloc[i] = -mkt_ret.iloc[i] - SHORT_COST
 
-    # V20 returns (load from P23 results)
+    # V20 returns (load from P23 results, apply S3 breadth filter)
     v20_path = Path(r"D:\AI專案\StockAgent\finlab\database\disposal_outputs\p23_v20_longterm\p23_v20_longterm_trades.csv")
     v20_trades = pd.read_csv(v20_path, parse_dates=["entry_date", "exit_date"])
+
+    # S3 filter: skip entries when breadth < 40% AND market below MA20
+    mkt_ret_bt = close.pct_change().mean(axis=1)
+    mkt_close_bt = (1 + mkt_ret_bt).cumprod()
+    mkt_ma20_bt = mkt_close_bt.rolling(20).mean()
+    v20_trades["entry_idx"] = cal.searchsorted(v20_trades["entry_date"], side="left")
+    mask_bad = pd.Series(False, index=v20_trades.index)
+    for idx, t in v20_trades.iterrows():
+        ei = int(t["entry_idx"])
+        if ei < len(above_ma20) and ei < len(mkt_close_bt):
+            b = float(above_ma20.iloc[ei]) if not np.isnan(above_ma20.iloc[ei]) else 0.5
+            below = bool(mkt_close_bt.iloc[ei] < mkt_ma20_bt.iloc[ei]) if not np.isnan(mkt_ma20_bt.iloc[ei]) else False
+            if b < V20_BREADTH_MIN and below:
+                mask_bad.iloc[idx] = True
+    v20_trades = v20_trades[~mask_bad].copy()
+    print(f"  V20 after breadth filter: {len(v20_trades)} trades (removed {mask_bad.sum()})")
 
     v20_daily = pd.Series(0.0, index=cal)
     for _, t in v20_trades.iterrows():
