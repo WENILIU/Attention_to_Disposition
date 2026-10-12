@@ -1,11 +1,12 @@
-"""V20 每日訊號腳本 — 處置期間做多策略.
+"""V20 每日訊號腳本 — 處置期間做多策略 (動態倉位版).
 
 策略邏輯（純規則，無 ML 模型）:
   新制 (處置5天): Day 1 進場, Day 4 出場
   舊制 (處置10天): Day 4 進場, Day 9 出場
   濾網: 流動性>20M, Gap -8%~+4%
   熔斷: >400家跌>6% → 清倉9天
-  部位: 5檔, 每檔20%
+  動態倉位: 廣度>50%→5倉, 40-50%→3倉, <40%→0倉
+  部位: 每檔 1/max_positions
 
 使用方式:
   python v20_daily_signal.py              # 生成今日訂單
@@ -44,6 +45,8 @@ GAP_HIGH = 0.04
 MAX_POSITIONS = 5
 POSITION_SIZE = 0.20
 PANIC_THRESHOLD = 400
+BREADTH_HIGH = 0.50
+BREADTH_LOW = 0.40
 PANIC_COOLDOWN = 9
 COST_RATE = 0.001425 + 0.003 + 0.003
 NEW_REGIME_DATE = pd.Timestamp("2026-08-10")
@@ -103,12 +106,34 @@ def load_data():
     is_panic = panic_count > PANIC_THRESHOLD
     danger_zone = is_panic.rolling(PANIC_COOLDOWN, min_periods=1).max() > 0
 
+    # Breadth (dynamic position sizing)
+    ma20 = close.rolling(20).mean()
+    above_ma20 = (close > ma20).sum(axis=1) / close.notna().sum(axis=1)
+
     print(f"  處置事件: {len(dis):,}, 價格數據: {cal[0].date()} ~ {cal[-1].date()}")
-    return dis, close, open_p, vol, cal, valid_stocks, avg_turnover_5d, danger_zone
+    return dis, close, open_p, vol, cal, valid_stocks, avg_turnover_5d, danger_zone, above_ma20
 
 
-# ==================== 2. 訊號生成 ====================
-def generate_entry_signals(dis, close, open_p, cal, avg_turnover_5d, danger_zone, today_idx):
+# ==================== 2. 動態倉位 ====================
+def get_max_positions(breadth_val):
+    """根據市場廣度決定最大持倉數 (P33 三階梯方案).
+
+    廣度 > 50%: 5 倉 (正常)
+    廣度 40-50%: 3 倉 (縮減)
+    廣度 < 40%: 0 倉 (停止)
+    """
+    if np.isnan(breadth_val):
+        return MAX_POSITIONS
+    if breadth_val >= BREADTH_HIGH:
+        return MAX_POSITIONS
+    elif breadth_val >= BREADTH_LOW:
+        return 3
+    else:
+        return 0
+
+
+# ==================== 3. 訊號生成 ====================
+def generate_entry_signals(dis, close, open_p, cal, avg_turnover_5d, danger_zone, above_ma20, today_idx):
     """Generate BUY signals for disposals starting on today."""
     signals = []
 
@@ -127,6 +152,15 @@ def generate_entry_signals(dis, close, open_p, cal, avg_turnover_5d, danger_zone
     if danger_zone.iloc[today_idx]:
         print(f"  🚨 熔斷中，跳過所有進場")
         return signals
+
+    # Dynamic position sizing: check breadth
+    breadth_val = above_ma20.iloc[today_idx]
+    max_pos = get_max_positions(breadth_val)
+    if max_pos == 0:
+        print(f"  ⛔ 廣度 {breadth_val:.1%} < {BREADTH_LOW:.0%}，停止進場")
+        return signals
+    if max_pos < MAX_POSITIONS:
+        print(f"  ⚠️ 廣度 {breadth_val:.1%}，動態縮減至 {max_pos} 倉")
 
     for _, row in starting_today.iterrows():
         sym = row["stock_id"]
@@ -198,8 +232,8 @@ def generate_exit_signals(state, cal, today_idx):
     return exits
 
 
-# ==================== 3. 實盤模式 ====================
-def run_production(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
+# ==================== 4. 實盤模式 ====================
+def run_production(dis, close, open_p, cal, avg_turnover_5d, danger_zone, above_ma20):
     """Generate today's orders."""
     print("\n" + "=" * 60)
     print("  V20 實盤模式 — 今日訂單")
@@ -217,13 +251,15 @@ def run_production(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
 
     # Generate entry signals
     entry_signals = generate_entry_signals(
-        dis, close, open_p, cal, avg_turnover_5d, danger_zone, today_idx
+        dis, close, open_p, cal, avg_turnover_5d, danger_zone, above_ma20, today_idx
     )
 
-    # Apply position limit
+    # Apply dynamic position limit
+    breadth_val = above_ma20.iloc[today_idx]
+    max_pos = get_max_positions(breadth_val)
     remaining_positions = [p for p in state["positions"]
                           if pd.Timestamp(p["exit_date"]) > today]
-    available_slots = MAX_POSITIONS - len(remaining_positions)
+    available_slots = max_pos - len(remaining_positions)
 
     # Sort entries by condition priority (連5日 > 其他)
     priority_conditions = ["連5日", "借券比"]
@@ -264,8 +300,8 @@ def run_production(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
     print(f"  📊 目前持倉: {len(state['positions'])} 檔")
 
 
-# ==================== 4. 回測模式 ====================
-def run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
+# ==================== 5. 回測模式 ====================
+def run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone, above_ma20):
     """Full backtest."""
     print("\n" + "=" * 60)
     print("  V20 完整回測")
@@ -294,6 +330,9 @@ def run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
         if entry_idx < 0 or exit_idx >= n_cal or entry_idx >= exit_idx:
             continue
         if danger_zone.iloc[entry_idx]:
+            continue
+        # Dynamic position sizing: skip if breadth too low
+        if get_max_positions(above_ma20.iloc[entry_idx]) == 0:
             continue
 
         try:
@@ -327,14 +366,15 @@ def run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
     all_trades = pd.DataFrame(trades)
     all_trades = all_trades.sort_values(["entry_date", "ret"], ascending=[True, False])
 
-    # Portfolio sim
+    # Portfolio sim (dynamic position sizing)
     active = []
     executed = []
     for _, trade in all_trades.iterrows():
         ei = int(trade["entry_idx"])
         xi = int(trade["exit_idx"])
         active = [(e, s) for e, s in active if e > ei]
-        if len(active) >= MAX_POSITIONS:
+        max_pos = get_max_positions(above_ma20.iloc[ei])
+        if len(active) >= max_pos:
             continue
         if any(s == trade["stock_id"] for _, s in active):
             continue
@@ -343,12 +383,13 @@ def run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
 
     ex = pd.DataFrame(executed)
 
-    # Metrics
+    # Metrics (dynamic position sizing: each position gets 1/max_pos at entry time)
     daily_returns = pd.Series(0.0, index=cal)
-    cap = 1.0 / MAX_POSITIONS
     for _, t in ex.iterrows():
         ei = int(t["entry_idx"])
         xi = int(t["exit_idx"])
+        max_pos = get_max_positions(above_ma20.iloc[ei])
+        cap = 1.0 / max(max_pos, 1)
         hold = max(xi - ei + 1, 1)
         dr = t["ret"] / hold
         for d in range(ei, min(xi + 1, n_cal)):
@@ -390,7 +431,7 @@ def run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone):
     ex.to_csv(OUTPUT_DIR / "v20_backtest_trades.csv", index=False, encoding="utf-8-sig")
 
 
-# ==================== 5. 狀態管理 ====================
+# ==================== 6. 狀態管理 ====================
 def load_state():
     if STATE_PATH.exists():
         with open(STATE_PATH, "r", encoding="utf-8") as f:
@@ -420,7 +461,7 @@ def main():
 
     print("=" * 60)
     print("  V20 — 處置期間做多 (每日訊號)")
-    print(f"  部位: {MAX_POSITIONS}檔, 每檔{POSITION_SIZE:.0%}")
+    print(f"  部位: 動態 {MAX_POSITIONS}/3/0 倉 (廣度 {BREADTH_HIGH:.0%}/{BREADTH_LOW:.0%} 階梯)")
     print(f"  濾網: 流動性>{MIN_TURNOVER//10000}萬, Gap {GAP_LOW:.0%}~{GAP_HIGH:.0%}")
     print(f"  熔斷: >{PANIC_THRESHOLD}家跌>6% → 暫停{PANIC_COOLDOWN}天")
     print("=" * 60)
@@ -430,12 +471,12 @@ def main():
         return
 
     auto_login()
-    dis, close, open_p, vol, cal, valid_stocks, avg_turnover_5d, danger_zone = load_data()
+    dis, close, open_p, vol, cal, valid_stocks, avg_turnover_5d, danger_zone, above_ma20 = load_data()
 
     if args.backtest:
-        run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone)
+        run_backtest(dis, close, open_p, cal, avg_turnover_5d, danger_zone, above_ma20)
     else:
-        run_production(dis, close, open_p, cal, avg_turnover_5d, danger_zone)
+        run_production(dis, close, open_p, cal, avg_turnover_5d, danger_zone, above_ma20)
 
     print("\n✅ 完成!")
 
